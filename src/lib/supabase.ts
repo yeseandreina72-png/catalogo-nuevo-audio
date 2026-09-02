@@ -8,6 +8,30 @@ let lastUsedUrl = '';
 let lastUsedKey = '';
 
 /**
+ * Cleans and normalizes Supabase URL
+ */
+export function cleanSupabaseUrl(rawUrl: string): string {
+  let url = (rawUrl || '').trim();
+  url = url.replace(/['";]/g, '');
+  // Remove trailing slashes
+  url = url.replace(/\/+$/, '');
+  // Ensure https://
+  if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+    url = `https://${url}`;
+  }
+  return url;
+}
+
+/**
+ * Cleans and normalizes Supabase Anon / Public Key
+ */
+export function cleanSupabaseKey(rawKey: string): string {
+  let key = (rawKey || '').trim();
+  key = key.replace(/['"\s;]/g, '');
+  return key;
+}
+
+/**
  * Retrieves current Supabase credentials from environment or local storage.
  */
 export function getSupabaseConfig(): { url: string; anonKey: string } {
@@ -17,8 +41,8 @@ export function getSupabaseConfig(): { url: string; anonKey: string } {
   const localUrl = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_SUPABASE_URL_KEY) || '' : '';
   const localKey = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_SUPABASE_KEY_KEY) || '' : '';
 
-  const url = (localUrl || envUrl).trim();
-  const anonKey = (localKey || envKey).trim();
+  const url = cleanSupabaseUrl(localUrl || envUrl);
+  const anonKey = cleanSupabaseKey(localKey || envKey);
 
   return { url, anonKey };
 }
@@ -28,8 +52,8 @@ export function getSupabaseConfig(): { url: string; anonKey: string } {
  */
 export function saveSupabaseConfig(url: string, anonKey: string): void {
   if (typeof window === 'undefined') return;
-  const cleanUrl = url.trim();
-  const cleanKey = anonKey.trim();
+  const cleanUrl = cleanSupabaseUrl(url);
+  const cleanKey = cleanSupabaseKey(anonKey);
 
   if (cleanUrl) {
     localStorage.setItem(STORAGE_SUPABASE_URL_KEY, cleanUrl);
@@ -44,6 +68,8 @@ export function saveSupabaseConfig(url: string, anonKey: string): void {
   }
 
   cachedClient = null;
+  lastUsedUrl = '';
+  lastUsedKey = '';
 }
 
 /**

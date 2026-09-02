@@ -12,6 +12,9 @@ import {
   Globe,
   Radio,
   Sparkles,
+  Eye,
+  EyeOff,
+  ClipboardPaste,
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -19,6 +22,8 @@ import {
   testSupabaseConnection,
   saveBatchImagesToSupabase,
   isSupabaseConfigured,
+  cleanSupabaseUrl,
+  cleanSupabaseKey,
 } from '../lib/supabase';
 import { EquipmentItem } from '../types';
 
@@ -34,9 +39,14 @@ CREATE TABLE IF NOT EXISTS public.equipment_images (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2. Habilitar seguridad pero permitir lectura pública y escritura
+-- 2. Habilitar seguridad RLS
 ALTER TABLE public.equipment_images ENABLE ROW LEVEL SECURITY;
 
+-- 3. Eliminar políticas existentes si ya fueron creadas (para evitar errores 42710)
+DROP POLICY IF EXISTS "Lectura publica de fotos" ON public.equipment_images;
+DROP POLICY IF EXISTS "Guardar o actualizar fotos" ON public.equipment_images;
+
+-- 4. Crear permisos de lectura publica y escritura (SELECT, INSERT, UPDATE)
 CREATE POLICY "Lectura publica de fotos" 
 ON public.equipment_images FOR SELECT 
 USING (true);
@@ -46,12 +56,23 @@ ON public.equipment_images FOR ALL
 USING (true) 
 WITH CHECK (true);
 
--- 3. Habilitar Realtime para reflejo instantáneo en todos los dispositivos
-ALTER PUBLICATION supabase_realtime ADD TABLE public.equipment_images;`;
+-- 5. Habilitar Realtime para reflejo instantáneo en todos los dispositivos
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+    AND schemaname = 'public' 
+    AND tablename = 'equipment_images'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.equipment_images;
+  END IF;
+END $$;`;
 
 export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
   const [supabaseUrl, setSupabaseUrl] = useState('');
   const [supabaseKey, setSupabaseKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [testResult, setTestResult] = useState<{
@@ -73,10 +94,29 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
   }, []);
 
   const handleSaveCredentials = () => {
-    saveSupabaseConfig(supabaseUrl, supabaseKey);
-    setStatusMsg('¡Credenciales de Supabase guardadas con éxito!');
-    handleTestConnection(supabaseUrl, supabaseKey);
+    const cleanUrl = cleanSupabaseUrl(supabaseUrl);
+    const cleanKey = cleanSupabaseKey(supabaseKey);
+    setSupabaseUrl(cleanUrl);
+    setSupabaseKey(cleanKey);
+
+    saveSupabaseConfig(cleanUrl, cleanKey);
+    setStatusMsg('¡Credenciales guardadas y verificadas!');
+    handleTestConnection(cleanUrl, cleanKey);
     setTimeout(() => setStatusMsg(''), 4000);
+  };
+
+  const handlePasteKey = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        const cleaned = cleanSupabaseKey(text);
+        setSupabaseKey(cleaned);
+        setStatusMsg('¡Clave pegada del portapapeles!');
+        setTimeout(() => setStatusMsg(''), 3000);
+      }
+    } catch {
+      // ignore
+    }
   };
 
   const handleTestConnection = async (urlToTest?: string, keyToTest?: string) => {
@@ -212,17 +252,38 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
           </div>
 
           <div>
-            <label className="block text-[11px] font-medium text-slate-300 mb-1 flex items-center gap-1">
-              <Key className="w-3 h-3 text-cyan-400" />
-              Anon / Public Key:
+            <label className="block text-[11px] font-medium text-slate-300 mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <Key className="w-3 h-3 text-cyan-400" />
+                Anon / Public Key (eyJ...):
+              </span>
+              <button
+                type="button"
+                onClick={handlePasteKey}
+                className="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-800/60"
+                title="Pegar del portapapeles"
+              >
+                <ClipboardPaste className="w-3 h-3" />
+                <span>Pegar</span>
+              </button>
             </label>
-            <input
-              type="password"
-              value={supabaseKey}
-              onChange={(e) => setSupabaseKey(e.target.value)}
-              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 font-mono"
-            />
+            <div className="relative">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={supabaseKey}
+                onChange={(e) => setSupabaseKey(cleanSupabaseKey(e.target.value))}
+                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-9 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 p-1"
+                title={showKey ? 'Ocultar clave' : 'Mostrar clave'}
+              >
+                {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 pt-1">
