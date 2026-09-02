@@ -19,12 +19,16 @@ import {
   Smartphone,
   Laptop,
   CheckCheck,
+  Database,
+  Radio,
 } from 'lucide-react';
 import { EquipmentItem, ServiceCategory } from '../types';
 import { AVAILABLE_PUBLIC_IMAGES, CATEGORIES } from '../data/catalogData';
 import { SafeImage } from './SafeImage';
 import { compressImage, matchFilenameToEquipmentId } from '../utils/imageUtils';
 import { downloadBackupJSON, parseBackupFile } from '../utils/persistentStorage';
+import { SupabaseSyncTab } from './SupabaseSyncTab';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 interface ImageCustomizerModalProps {
   isOpen: boolean;
@@ -43,6 +47,7 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
   onBatchUpdateImages,
   onResetAllImages,
 }) => {
+  const [mainTab, setMainTab] = useState<'photos' | 'database'>('photos');
   const [selectedItemId, setSelectedItemId] = useState<string>(items[0]?.id || '');
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory>('all');
   const [customUrl, setCustomUrl] = useState('');
@@ -248,31 +253,69 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
           </button>
         </div>
 
-        {/* Mobile View Switcher (Visible only on screens < md) */}
-        <div className="flex md:hidden items-center gap-2 mb-3 shrink-0">
+        {/* Primary View Switcher: Photos vs Supabase Cloud DB */}
+        <div className="flex items-center gap-2 mb-3 shrink-0">
           <button
             type="button"
-            onClick={() => setMobileTab('list')}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-              mobileTab === 'list'
-                ? 'bg-cyan-400 text-slate-950 shadow-md'
-                : 'bg-slate-900 text-slate-300 border border-slate-800'
+            onClick={() => setMainTab('photos')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              mainTab === 'photos'
+                ? 'bg-cyan-400 text-slate-950 shadow-md shadow-cyan-400/20 font-extrabold'
+                : 'bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 border border-slate-800'
             }`}
           >
-            1. Ver Lista ({filteredItems.length})
+            <Images className="w-3.5 h-3.5" />
+            <span>1. Fotos de Equipos</span>
           </button>
+
           <button
             type="button"
-            onClick={() => setMobileTab('editor')}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-              mobileTab === 'editor'
-                ? 'bg-cyan-400 text-slate-950 shadow-md'
-                : 'bg-slate-900 text-slate-300 border border-slate-800'
+            onClick={() => setMainTab('database')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              mainTab === 'database'
+                ? 'bg-emerald-400 text-slate-950 shadow-md shadow-emerald-400/20 font-extrabold'
+                : 'bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 border border-slate-800'
             }`}
           >
-            2. Editar Foto ({activeItem?.name?.slice(0, 14)}...)
+            <Database className="w-3.5 h-3.5" />
+            <span>2. Base de Datos (Supabase)</span>
+            {isSupabaseConfigured() && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Supabase Activo" />
+            )}
           </button>
         </div>
+
+        {mainTab === 'database' ? (
+          <div className="flex-1 overflow-y-auto pr-1">
+            <SupabaseSyncTab items={items} />
+          </div>
+        ) : (
+          <>
+            {/* Mobile View Switcher (Visible only on screens < md) */}
+            <div className="flex md:hidden items-center gap-2 mb-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setMobileTab('list')}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                  mobileTab === 'list'
+                    ? 'bg-cyan-400 text-slate-950 shadow-md'
+                    : 'bg-slate-900 text-slate-300 border border-slate-800'
+                }`}
+              >
+                1. Ver Lista ({filteredItems.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileTab('editor')}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                  mobileTab === 'editor'
+                    ? 'bg-cyan-400 text-slate-950 shadow-md'
+                    : 'bg-slate-900 text-slate-300 border border-slate-800'
+                }`}
+              >
+                2. Editar Foto ({activeItem?.name?.slice(0, 14)}...)
+              </button>
+            </div>
 
         {/* Quick Drag / Batch Upload Zone */}
         <div
@@ -553,7 +596,9 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </>
+    )}
+  </div>
+</div>
   );
 };

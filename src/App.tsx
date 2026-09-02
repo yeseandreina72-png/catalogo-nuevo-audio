@@ -12,13 +12,12 @@ import { ContactAndFooter } from './components/ContactAndFooter';
 import { AudioVisualizerBackground } from './components/AudioVisualizerBackground';
 import {
   loadImagesFromLocalStorage,
-  loadImagesFromIndexedDB,
-  fetchSavedImagesFromServer,
   saveAllImagesPermanently,
   clearAllImagesPermanently,
-  consolidateImages,
+  fetchAllImagesWithCloudSync,
   sanitizeImagePath,
 } from './utils/persistentStorage';
+import { subscribeToSupabaseImages } from './lib/supabase';
 
 export default function App() {
   // Synchronous first render using consolidated local storage (covers all keys & versions)
@@ -62,19 +61,11 @@ export default function App() {
     }
   };
 
-  // Asynchronous recovery from IndexedDB and server synchronization
+  // Asynchronous recovery from Supabase Cloud DB, IndexedDB, and server synchronization
   useEffect(() => {
     async function syncStorage() {
       try {
-        const [indexedImages, serverImages] = await Promise.all([
-          loadImagesFromIndexedDB(),
-          fetchSavedImagesFromServer(),
-        ]);
-
-        const localSaved = loadImagesFromLocalStorage();
-        // Consolidate: server disk, local storage, and all IndexedDB stores.
-        // User uploads (data:) ALWAYS take #1 priority over any preset or standard URL!
-        const consolidated = consolidateImages(serverImages, localSaved, indexedImages);
+        const consolidated = await fetchAllImagesWithCloudSync();
 
         if (Object.keys(consolidated).length > 0) {
           setItems((prev) =>
@@ -87,15 +78,28 @@ export default function App() {
             })
           );
 
-          // Save consolidated map to all layers (IndexedDB, localStorage, and Server disk)
+          // Persist consolidated map
           saveAllImagesPermanently(consolidated);
         }
       } catch (e) {
-        console.error('Error during image sync:', e);
+        console.error('Error during cloud/local image sync:', e);
       }
     }
 
     syncStorage();
+
+    // Subscribe to real-time changes from Supabase
+    const unsubscribe = subscribeToSupabaseImages((itemId, newUrl) => {
+      if (itemId && newUrl) {
+        setItems((prev) =>
+          prev.map((it) => (it.id === itemId ? { ...it, image: newUrl } : it))
+        );
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   // Update image with permanent persistence across IndexedDB, localStorage, and Server API

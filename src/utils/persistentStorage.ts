@@ -1,7 +1,13 @@
+import {
+  fetchImagesFromSupabase,
+  saveBatchImagesToSupabase,
+  isSupabaseConfigured,
+} from '../lib/supabase';
+
 /**
- * Persistent Image Storage Engine using IndexedDB, localStorage, and Server Disk API.
+ * Persistent Image Storage Engine using Supabase Cloud DB, IndexedDB, localStorage, and Server Disk API.
  * Guarantees that user uploads and selected images NEVER disappear across reloads,
- * browser changes, different devices, or quota limits.
+ * browser changes, different devices, or quota limits, and syncs across all users.
  */
 
 const DB_NAME = 'NuevoAudioAppDB';
@@ -274,7 +280,7 @@ export function consolidateImages(
 }
 
 /**
- * Saves all images to localStorage, IndexedDB, and server disk in parallel.
+ * Saves all images to Supabase Cloud DB, localStorage, IndexedDB, and server disk in parallel.
  */
 export function saveAllImagesPermanently(images: Record<string, string>): void {
   if (typeof window === 'undefined') return;
@@ -293,7 +299,12 @@ export function saveAllImagesPermanently(images: Record<string, string>): void {
     }
   }
 
-  // 3. Sync with Server disk file via API (so all devices see it!)
+  // 3. Sync to Supabase Cloud Database (so ALL global users/devices see the changes!)
+  if (isSupabaseConfigured()) {
+    saveBatchImagesToSupabase(images).catch(() => {});
+  }
+
+  // 4. Sync with Server disk file via API
   try {
     fetch('/api/custom-images', {
       method: 'POST',
@@ -305,6 +316,26 @@ export function saveAllImagesPermanently(images: Record<string, string>): void {
   } catch {
     // ignore
   }
+}
+
+/**
+ * Master multi-tier image loader with automatic Supabase Cloud synchronization.
+ */
+export async function fetchAllImagesWithCloudSync(): Promise<Record<string, string>> {
+  const localMem = loadImagesFromLocalStorage();
+  const indexedData = await loadImagesFromIndexedDB();
+  const serverData = await fetchSavedImagesFromServer();
+  let supabaseData: Record<string, string> = {};
+
+  if (isSupabaseConfigured()) {
+    try {
+      supabaseData = await fetchImagesFromSupabase();
+    } catch {
+      // ignore
+    }
+  }
+
+  return consolidateImages(localMem, indexedData, serverData, supabaseData);
 }
 
 /**
