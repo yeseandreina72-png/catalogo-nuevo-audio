@@ -32,6 +32,33 @@ export function cleanSupabaseKey(rawKey: string): string {
 }
 
 /**
+ * Extracts matching project URL from a JWT anon key if available
+ */
+export function extractProjectUrlFromKey(key: string): string | null {
+  try {
+    const cleanKey = cleanSupabaseKey(key);
+    const parts = cleanKey.split('.');
+    if (parts.length >= 2) {
+      const base64Url = parts[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const payload = JSON.parse(jsonPayload);
+      if (payload && payload.ref) {
+        return `https://${payload.ref}.supabase.co`;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+/**
  * Retrieves current Supabase credentials from environment or local storage.
  */
 export function getSupabaseConfig(): { url: string; anonKey: string } {
@@ -41,8 +68,17 @@ export function getSupabaseConfig(): { url: string; anonKey: string } {
   const localUrl = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_SUPABASE_URL_KEY) || '' : '';
   const localKey = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_SUPABASE_KEY_KEY) || '' : '';
 
-  const url = cleanSupabaseUrl(localUrl || envUrl);
+  let url = cleanSupabaseUrl(localUrl || envUrl);
   const anonKey = cleanSupabaseKey(localKey || envKey);
+
+  // If key has project ref, auto-align URL
+  const matchedUrl = extractProjectUrlFromKey(anonKey);
+  if (matchedUrl && (!url || !url.includes(matchedUrl.replace('https://', '').replace('.supabase.co', '')))) {
+    url = matchedUrl;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_SUPABASE_URL_KEY, url);
+    }
+  }
 
   return { url, anonKey };
 }
@@ -52,8 +88,13 @@ export function getSupabaseConfig(): { url: string; anonKey: string } {
  */
 export function saveSupabaseConfig(url: string, anonKey: string): void {
   if (typeof window === 'undefined') return;
-  const cleanUrl = cleanSupabaseUrl(url);
+  let cleanUrl = cleanSupabaseUrl(url);
   const cleanKey = cleanSupabaseKey(anonKey);
+
+  const matchedUrl = extractProjectUrlFromKey(cleanKey);
+  if (matchedUrl && (!cleanUrl || !cleanUrl.includes(matchedUrl.replace('https://', '').replace('.supabase.co', '')))) {
+    cleanUrl = matchedUrl;
+  }
 
   if (cleanUrl) {
     localStorage.setItem(STORAGE_SUPABASE_URL_KEY, cleanUrl);

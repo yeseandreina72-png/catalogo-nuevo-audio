@@ -24,6 +24,7 @@ import {
   isSupabaseConfigured,
   cleanSupabaseUrl,
   cleanSupabaseKey,
+  extractProjectUrlFromKey,
 } from '../lib/supabase';
 import { EquipmentItem } from '../types';
 
@@ -93,8 +94,14 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
   }, []);
 
   const handleSaveCredentials = () => {
-    const cleanUrl = cleanSupabaseUrl(supabaseUrl);
+    let cleanUrl = cleanSupabaseUrl(supabaseUrl);
     const cleanKey = cleanSupabaseKey(supabaseKey);
+
+    const autoUrl = extractProjectUrlFromKey(cleanKey);
+    if (autoUrl && (!cleanUrl || !cleanUrl.includes(autoUrl.replace('https://', '').replace('.supabase.co', '')))) {
+      cleanUrl = autoUrl;
+    }
+
     setSupabaseUrl(cleanUrl);
     setSupabaseKey(cleanKey);
 
@@ -108,9 +115,17 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
     try {
       const text = await navigator.clipboard.readText();
       if (text) {
-        const cleaned = cleanSupabaseKey(text);
-        setSupabaseKey(cleaned);
-        setStatusMsg('¡Clave pegada del portapapeles!');
+        const cleanedKey = cleanSupabaseKey(text);
+        setSupabaseKey(cleanedKey);
+
+        const autoUrl = extractProjectUrlFromKey(cleanedKey);
+        if (autoUrl) {
+          setSupabaseUrl(autoUrl);
+          saveSupabaseConfig(autoUrl, cleanedKey);
+          setStatusMsg('¡Clave y URL de proyecto vinculadas automáticamente!');
+        } else {
+          setStatusMsg('¡Clave pegada del portapapeles!');
+        }
         setTimeout(() => setStatusMsg(''), 3000);
       }
     } catch {
@@ -129,6 +144,11 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
     try {
       const res = await testSupabaseConnection();
       setTestResult(res);
+
+      // Refresh URL/key state in case auto-alignment corrected the URL
+      const latest = getSupabaseConfig();
+      if (latest.url) setSupabaseUrl(latest.url);
+      if (latest.anonKey) setSupabaseKey(latest.anonKey);
     } catch (err: any) {
       setTestResult({
         success: false,
