@@ -12,6 +12,7 @@ async function startServer() {
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
   const DATA_FILE = path.join(process.cwd(), "src", "data", "savedCustomImages.json");
+  const CONFIG_FILE = path.join(process.cwd(), "src", "data", "supabaseConfig.json");
 
   // Read saved images from persistent disk file
   function getSavedImages(): Record<string, string> {
@@ -42,9 +43,54 @@ async function startServer() {
     }
   }
 
+  function getSupabaseServerConfig() {
+    try {
+      if (fs.existsSync(CONFIG_FILE)) {
+        const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error("Error reading supabase config file:", e);
+    }
+    return {
+      url: process.env.VITE_SUPABASE_URL || "",
+      anonKey: process.env.VITE_SUPABASE_ANON_KEY || "",
+    };
+  }
+
+  function persistSupabaseServerConfig(config: { url: string; anonKey: string }) {
+    try {
+      const dir = path.dirname(CONFIG_FILE);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8");
+    } catch (e) {
+      console.error("Error writing supabase config file:", e);
+    }
+  }
+
   // API endpoints FIRST
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok" });
+  });
+
+  // Get shared Supabase credentials across all devices
+  app.get("/api/supabase-config", (_req, res) => {
+    const config = getSupabaseServerConfig();
+    res.json({ success: true, config });
+  });
+
+  // Save shared Supabase credentials across all devices
+  app.post("/api/supabase-config", (req, res) => {
+    const { url, anonKey } = req.body || {};
+    if (url && anonKey) {
+      persistSupabaseServerConfig({ url, anonKey });
+    }
+    res.json({ success: true });
   });
 
   // Get saved custom images

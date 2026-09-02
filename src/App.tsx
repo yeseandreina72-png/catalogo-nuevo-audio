@@ -15,6 +15,7 @@ import {
   saveAllImagesPermanently,
   clearAllImagesPermanently,
   fetchAllImagesWithCloudSync,
+  saveImageToIndexedDB,
   sanitizeImagePath,
 } from './utils/persistentStorage';
 import { subscribeToSupabaseImages } from './lib/supabase';
@@ -77,9 +78,6 @@ export default function App() {
               return item;
             })
           );
-
-          // Persist consolidated map
-          saveAllImagesPermanently(consolidated);
         }
       } catch (e) {
         console.error('Error during cloud/local image sync:', e);
@@ -94,11 +92,18 @@ export default function App() {
         setItems((prev) =>
           prev.map((it) => (it.id === itemId ? { ...it, image: newUrl } : it))
         );
+        saveImageToIndexedDB(itemId, newUrl).catch(() => {});
       }
     });
 
+    // Auto-sync periodically or when window comes into focus
+    const interval = setInterval(syncStorage, 5000);
+    window.addEventListener('focus', syncStorage);
+
     return () => {
       if (unsubscribe) unsubscribe();
+      clearInterval(interval);
+      window.removeEventListener('focus', syncStorage);
     };
   }, []);
 

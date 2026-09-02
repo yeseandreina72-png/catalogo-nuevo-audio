@@ -84,7 +84,37 @@ export function getSupabaseConfig(): { url: string; anonKey: string } {
 }
 
 /**
- * Saves custom Supabase credentials from the UI settings.
+ * Syncs Supabase configuration with backend server so all devices share credentials automatically.
+ */
+export async function syncSupabaseConfigWithServer(): Promise<{ url: string; anonKey: string }> {
+  try {
+    const res = await fetch('/api/supabase-config');
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.config?.url && data?.config?.anonKey) {
+        const { url, anonKey } = data.config;
+        if (typeof window !== 'undefined') {
+          const currentUrl = localStorage.getItem(STORAGE_SUPABASE_URL_KEY);
+          const currentKey = localStorage.getItem(STORAGE_SUPABASE_KEY_KEY);
+          if (currentUrl !== url || currentKey !== anonKey) {
+            localStorage.setItem(STORAGE_SUPABASE_URL_KEY, url);
+            localStorage.setItem(STORAGE_SUPABASE_KEY_KEY, anonKey);
+            cachedClient = null;
+            lastUsedUrl = '';
+            lastUsedKey = '';
+          }
+        }
+        return { url, anonKey };
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return getSupabaseConfig();
+}
+
+/**
+ * Saves custom Supabase credentials from the UI settings and syncs to server.
  */
 export function saveSupabaseConfig(url: string, anonKey: string): void {
   if (typeof window === 'undefined') return;
@@ -106,6 +136,15 @@ export function saveSupabaseConfig(url: string, anonKey: string): void {
     localStorage.setItem(STORAGE_SUPABASE_KEY_KEY, cleanKey);
   } else {
     localStorage.removeItem(STORAGE_SUPABASE_KEY_KEY);
+  }
+
+  // Sync to server so other devices (phones, computers) get connected automatically
+  if (cleanUrl && cleanKey) {
+    fetch('/api/supabase-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: cleanUrl, anonKey: cleanKey }),
+    }).catch(() => {});
   }
 
   cachedClient = null;
@@ -228,34 +267,43 @@ export async function saveImageToSupabase(itemId: string, imageUrl: string): Pro
 }
 
 /**
- * Saves a batch of images to Supabase in parallel chunks.
+ * Saves a batch of images to Supabase in parallel individual calls to avoid payload size errors.
  */
 export async function saveBatchImagesToSupabase(imagesMap: Record<string, string>): Promise<boolean> {
   const client = getSupabaseClient();
   if (!client) return false;
 
-  const rows = Object.entries(imagesMap).map(([id, image_url]) => ({
-    id,
-    image_url,
-    updated_at: new Date().toISOString(),
-  }));
+  const entries = Object.entries(imagesMap);
+  if (entries.length === 0) return true;
 
-  if (rows.length === 0) return true;
+  let allSuccess = true;
 
-  try {
-    const { error } = await client
-      .from('equipment_images')
-      .upsert(rows, { onConflict: 'id' });
+  // Save each image individually so base64 strings never exceed HTTP request limits
+  for (const [id, image_url] of entries) {
+    if (!id || !image_url) continue;
+    try {
+      const { error } = await client
+        .from('equipment_images')
+        .upsert(
+          {
+            id,
+            image_url,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
 
-    if (error) {
-      console.warn('Error en upsert por lotes en Supabase:', error.message);
-      return false;
+      if (error) {
+        console.warn(`Error al guardar imagen "${id}" en Supabase:`, error.message);
+        allSuccess = false;
+      }
+    } catch (err) {
+      console.warn(`Excepción al guardar imagen "${id}" en Supabase:`, err);
+      allSuccess = false;
     }
-    return true;
-  } catch (err) {
-    console.warn('Excepción en batch upsert Supabase:', err);
-    return false;
   }
+
+  return allSuccess;
 }
 
 /**

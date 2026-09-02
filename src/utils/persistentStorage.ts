@@ -2,6 +2,7 @@ import {
   fetchImagesFromSupabase,
   saveBatchImagesToSupabase,
   isSupabaseConfigured,
+  syncSupabaseConfigWithServer,
 } from '../lib/supabase';
 
 /**
@@ -246,14 +247,13 @@ export async function fetchSavedImagesFromServer(): Promise<Record<string, strin
 }
 
 /**
- * Consolidates multiple image maps giving highest priority to user-uploaded data URLs.
+ * Consolidates multiple image maps, giving priority to maps passed later in arguments (e.g. cloud database).
  */
 export function consolidateImages(
   ...maps: Array<Record<string, string>>
 ): Record<string, string> {
   const result: Record<string, string> = {};
 
-  // First pass: standard sanitized paths
   for (const map of maps) {
     if (!map) continue;
     for (const [id, url] of Object.entries(map)) {
@@ -262,16 +262,6 @@ export function consolidateImages(
         if (clean) {
           result[id] = clean;
         }
-      }
-    }
-  }
-
-  // Second pass: any data: URL (user upload) ALWAYS overrides any preset or standard path!
-  for (const map of maps) {
-    if (!map) continue;
-    for (const [id, url] of Object.entries(map)) {
-      if (typeof url === 'string' && url.startsWith('data:')) {
-        result[id] = url;
       }
     }
   }
@@ -322,6 +312,8 @@ export function saveAllImagesPermanently(images: Record<string, string>): void {
  * Master multi-tier image loader with automatic Supabase Cloud synchronization.
  */
 export async function fetchAllImagesWithCloudSync(): Promise<Record<string, string>> {
+  await syncSupabaseConfigWithServer();
+
   const localMem = loadImagesFromLocalStorage();
   const indexedData = await loadImagesFromIndexedDB();
   const serverData = await fetchSavedImagesFromServer();
