@@ -1,0 +1,7 @@
+{
+  "name": "NUEVO AUDIO - Producción Audiovisual",
+  "description": "Catálogo interactivo y presentación para NUEVO AUDIO: sonido profesional, iluminación, estructuras truss, techos 10x10, pantallas LED, tarimas y plantas eléctricas para eventos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
