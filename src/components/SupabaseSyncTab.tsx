@@ -42,21 +42,18 @@ CREATE TABLE IF NOT EXISTS public.equipment_images (
 -- 2. Habilitar seguridad RLS
 ALTER TABLE public.equipment_images ENABLE ROW LEVEL SECURITY;
 
--- 3. Eliminar políticas existentes si ya fueron creadas (para evitar errores 42710)
+-- 3. Eliminar políticas previas para evitar errores de duplicados
 DROP POLICY IF EXISTS "Lectura publica de fotos" ON public.equipment_images;
 DROP POLICY IF EXISTS "Guardar o actualizar fotos" ON public.equipment_images;
+DROP POLICY IF EXISTS "Permitir todo" ON public.equipment_images;
 
--- 4. Crear permisos de lectura publica y escritura (SELECT, INSERT, UPDATE)
-CREATE POLICY "Lectura publica de fotos" 
-ON public.equipment_images FOR SELECT 
-USING (true);
-
-CREATE POLICY "Guardar o actualizar fotos" 
+-- 4. Crear permiso de lectura y escritura para todos
+CREATE POLICY "Permitir todo" 
 ON public.equipment_images FOR ALL 
 USING (true) 
 WITH CHECK (true);
 
--- 5. Habilitar Realtime para reflejo instantáneo en todos los dispositivos
+-- 5. Habilitar Realtime para sincronización en tiempo real
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -67,6 +64,8 @@ BEGIN
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.equipment_images;
   END IF;
+EXCEPTION
+  WHEN OTHERS THEN NULL;
 END $$;`;
 
 export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {

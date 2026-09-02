@@ -92,10 +92,21 @@ export function getSupabaseClient(): SupabaseClient | null {
   }
 
   try {
+    const headers: Record<string, string> = {
+      apikey: anonKey,
+    };
+    // Include Bearer header if key is standard JWT
+    if (anonKey.startsWith('eyJ')) {
+      headers.Authorization = `Bearer ${anonKey}`;
+    }
+
     cachedClient = createClient(url, anonKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
+      },
+      global: {
+        headers,
       },
       realtime: {
         params: {
@@ -247,11 +258,85 @@ export async function testSupabaseConnection(): Promise<{
   message: string;
   tableExists?: boolean;
 }> {
+  const { url, anonKey } = getSupabaseConfig();
+  if (!url || !anonKey) {
+    return {
+      success: false,
+      message: 'Falta configurar la URL y la Anon Key de Supabase.',
+    };
+  }
+
+  const cleanUrl = cleanSupabaseUrl(url);
+  const cleanKey = cleanSupabaseKey(anonKey);
+
+  // 1. Direct REST probe
+  try {
+    const headers: Record<string, string> = {
+      'apikey': cleanKey,
+      'Content-Type': 'application/json',
+    };
+
+    if (cleanKey.startsWith('eyJ')) {
+      headers['Authorization'] = `Bearer ${cleanKey}`;
+    }
+
+    const restUrl = `${cleanUrl}/rest/v1/equipment_images?select=id&limit=1`;
+    const response = await fetch(restUrl, { method: 'GET', headers });
+
+    if (response.ok) {
+      return {
+        success: true,
+        tableExists: true,
+        message: '¡Conexión exitosa y tabla "equipment_images" detectada correctamente en Supabase!',
+      };
+    }
+
+    const errorBody = await response.json().catch(() => ({}));
+
+    if (
+      response.status === 404 ||
+      response.status === 400 ||
+      errorBody.code === '42P01' ||
+      (errorBody.message && errorBody.message.includes('does not exist'))
+    ) {
+      return {
+        success: true,
+        tableExists: false,
+        message: '¡Conexión exitosa a Supabase! Solo falta ejecutar el código SQL para crear la tabla.',
+      };
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      if (cleanKey.startsWith('sb_publishable_')) {
+        return {
+          success: false,
+          message: 'Estás usando la clave "Publishable key" (sb_publishable_...). Por favor ve a Supabase > Settings > API Keys > pestaña "Legacy anon, service_role API keys" y copia la clave "anon public" (empieza con eyJ...).',
+        };
+      }
+
+      const parts = cleanKey.split('.');
+      if (cleanKey.startsWith('eyJ') && (parts.length < 3 || cleanKey.length < 130)) {
+        return {
+          success: false,
+          message: 'La clave "anon" está INCOMPLETA (se cortó al copiar). En Supabase, NO selecciones el texto con el ratón; haz clic directamente en el botón "Copy" al lado derecho de la clave.',
+        };
+      }
+
+      return {
+        success: false,
+        message: 'Clave API no válida para este proyecto. Ve a Supabase > Settings > API Keys > pestaña "Legacy anon, service_role API keys" y haz clic en "Copy" en la clave "anon public".',
+      };
+    }
+  } catch (err: any) {
+    console.warn('Probe REST fallo:', err);
+  }
+
+  // Fallback using Supabase client
   const client = getSupabaseClient();
   if (!client) {
     return {
       success: false,
-      message: 'Falta configurar la URL y la Anon Key de Supabase.',
+      message: 'Falta configurar las credenciales de Supabase.',
     };
   }
 
@@ -261,24 +346,25 @@ export async function testSupabaseConnection(): Promise<{
       .select('id')
       .limit(1);
 
-    if (error) {
-      if (error.code === '42P01' || error.message.includes('does not exist')) {
-        return {
-          success: true,
-          tableExists: false,
-          message: 'Conexión exitosa, pero la tabla "equipment_images" aún no existe en tu base de datos.',
-        };
-      }
+    if (!error) {
       return {
-        success: false,
-        message: `Error de Supabase: ${error.message}`,
+        success: true,
+        tableExists: true,
+        message: '¡Conexión exitosa con Supabase! Base de datos sincronizada.',
+      };
+    }
+
+    if (error.code === '42P01' || error.message.includes('does not exist')) {
+      return {
+        success: true,
+        tableExists: false,
+        message: 'Conexión exitosa, pero la tabla "equipment_images" aún no existe en tu base de datos.',
       };
     }
 
     return {
-      success: true,
-      tableExists: true,
-      message: `¡Conexión exitosa con Supabase! Base de datos sincronizada.`,
+      success: false,
+      message: `Error de Supabase: ${error.message || 'Verifica la clave API.'}`,
     };
   } catch (err: any) {
     return {
