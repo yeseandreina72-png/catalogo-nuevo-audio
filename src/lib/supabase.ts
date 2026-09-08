@@ -177,11 +177,8 @@ export function getSupabaseClient(): SupabaseClient | null {
   try {
     const headers: Record<string, string> = {
       apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
     };
-    // Include Bearer header if key is standard JWT
-    if (anonKey.startsWith('eyJ')) {
-      headers.Authorization = `Bearer ${anonKey}`;
-    }
 
     cachedClient = createClient(url, anonKey, {
       auth: {
@@ -412,12 +409,9 @@ export async function testSupabaseConnection(): Promise<{
   try {
     const headers: Record<string, string> = {
       'apikey': cleanKey,
+      'Authorization': `Bearer ${cleanKey}`,
       'Content-Type': 'application/json',
     };
-
-    if (cleanKey.startsWith('eyJ')) {
-      headers['Authorization'] = `Bearer ${cleanKey}`;
-    }
 
     const restUrl = `${cleanUrl}/rest/v1/equipment_images?select=id&limit=1`;
     const response = await fetch(restUrl, { method: 'GET', headers });
@@ -446,24 +440,24 @@ export async function testSupabaseConnection(): Promise<{
     }
 
     if (response.status === 401 || response.status === 403) {
-      if (cleanKey.startsWith('sb_publishable_')) {
-        return {
-          success: false,
-          message: 'Estás usando la clave "Publishable key" (sb_publishable_...). Por favor ve a Supabase > Settings > API Keys > pestaña "Legacy anon, service_role API keys" y copia la clave "anon public" (empieza con eyJ...).',
-        };
-      }
-
       const parts = cleanKey.split('.');
       if (cleanKey.startsWith('eyJ') && (parts.length < 3 || cleanKey.length < 130)) {
         return {
           success: false,
-          message: 'La clave "anon" está INCOMPLETA (se cortó al copiar). En Supabase, NO selecciones el texto con el ratón; haz clic directamente en el botón "Copy" al lado derecho de la clave.',
+          message: 'La clave "anon" está INCOMPLETA (se cortó al copiar). En Supabase haz clic en el botón "Copy" al lado de la clave anon.',
+        };
+      }
+
+      if (cleanKey.startsWith('sb_publishable_')) {
+        return {
+          success: false,
+          message: 'Tu proyecto requiere la clave "anon public" (JWT). En Supabase ve a Settings > API Keys > pestaña "Legacy anon, service_role API keys" (o Data API) y copia la clave "anon public" que empieza con eyJ...',
         };
       }
 
       return {
         success: false,
-        message: 'Clave API no válida para este proyecto. Ve a Supabase > Settings > API Keys > pestaña "Legacy anon, service_role API keys" y haz clic en "Copy" en la clave "anon public".',
+        message: 'Clave API no autorizada. En Supabase ve a Settings > API Keys y copia la clave "anon public".',
       };
     }
   } catch (err: any) {
