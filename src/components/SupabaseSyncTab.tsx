@@ -25,6 +25,7 @@ import {
   cleanSupabaseUrl,
   cleanSupabaseKey,
   extractProjectUrlFromKey,
+  generateDeviceSyncUrl,
 } from '../lib/supabase';
 import { EquipmentItem } from '../types';
 
@@ -64,6 +65,7 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
   const [showKey, setShowKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [copiedSyncLink, setCopiedSyncLink] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
@@ -189,6 +191,20 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
     setTimeout(() => setCopiedSql(false), 3000);
   };
 
+  const handleCopySyncLink = () => {
+    const syncUrl = generateDeviceSyncUrl();
+    if (syncUrl) {
+      navigator.clipboard.writeText(syncUrl);
+      setCopiedSyncLink(true);
+      setStatusMsg('📲 ¡Enlace para celular copiado! Pégalo en WhatsApp o envíalo a tu teléfono para vincularlo sin tener que escribir contraseñas.');
+      setTimeout(() => setCopiedSyncLink(false), 3500);
+      setTimeout(() => setStatusMsg(''), 7000);
+    } else {
+      setStatusMsg('Primero ingresa y guarda las credenciales de Supabase para generar el enlace.');
+      setTimeout(() => setStatusMsg(''), 4000);
+    }
+  };
+
   const projectRef =
     extractProjectUrlFromKey(supabaseKey)?.replace('https://', '').replace('.supabase.co', '') ||
     supabaseUrl.replace('https://', '').replace('.supabase.co', '').split('/')[0] ||
@@ -198,7 +214,7 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
   const tableEditorUrl = `https://supabase.com/dashboard/project/${projectRef}/editor`;
 
   return (
-    <div className="space-y-5 text-left text-slate-200 py-1">
+    <div className="space-y-4 text-left text-slate-200 py-1">
       {/* Live Status Header */}
       <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-slate-900 to-cyan-500/10 border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -215,7 +231,7 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
                 </span>
               ) : (
                 <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-[10px] font-bold">
-                  Acción Requerida en SQL Editor
+                  Acción Requerida en Supabase
                 </span>
               )}
             </div>
@@ -225,7 +241,15 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleCopySyncLink}
+            className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs font-semibold flex items-center gap-1.5 border border-cyan-500/40 transition-colors"
+            title="Copiar enlace para abrir en el celular ya configurado"
+          >
+            <span>{copiedSyncLink ? '✓ Enlace Copiado' : '📲 Enlace para Celular'}</span>
+          </button>
           <a
             href={tableEditorUrl}
             target="_blank"
@@ -246,6 +270,75 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
           </a>
         </div>
       </div>
+
+      {/* Prominent Banner when Table is Missing */}
+      {testResult && testResult.success && !testResult.tableExists && (
+        <div className="p-4 rounded-2xl bg-amber-950/50 border border-amber-500/50 text-amber-200 text-xs space-y-3">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <h5 className="font-extrabold text-white text-sm">
+                Falta crear la tabla "equipment_images" en Supabase
+              </h5>
+              <p className="text-xs text-amber-200/90 mt-1">
+                La conexión a tu proyecto está funcionando, pero tu base de datos todavía no tiene la tabla para guardar las fotos. Solo necesitas hacer estos 3 pasos (tarda menos de 30 segundos):
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleCopySql}
+              className="p-3 rounded-xl bg-slate-900 border border-amber-500/30 hover:border-amber-400 text-left transition-all"
+            >
+              <div className="flex items-center justify-between text-cyan-400 font-bold mb-1">
+                <span>Paso 1</span>
+                {copiedSql ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              </div>
+              <p className="text-xs font-semibold text-white">
+                {copiedSql ? '¡Código SQL Copiado!' : 'Copiar Código SQL'}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Haz clic aquí para copiar el script al portapapeles</p>
+            </button>
+
+            <a
+              href={sqlEditorUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-3 rounded-xl bg-slate-900 border border-emerald-500/30 hover:border-emerald-400 text-left transition-all"
+            >
+              <div className="flex items-center justify-between text-emerald-400 font-bold mb-1">
+                <span>Paso 2</span>
+                <ExternalLink className="w-4 h-4" />
+              </div>
+              <p className="text-xs font-semibold text-white">Abrir SQL Editor</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Se abrirá la consola SQL de tu proyecto en Supabase</p>
+            </a>
+
+            <div className="p-3 rounded-xl bg-slate-900 border border-slate-700 text-left">
+              <span className="text-amber-400 font-bold block mb-1">Paso 3</span>
+              <p className="text-xs font-semibold text-white">Pegar y presionar RUN</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">En Supabase pega el código y presiona el botón verde RUN</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-[11px] text-slate-400">
+              ¿Ya presionaste RUN en Supabase?
+            </span>
+            <button
+              type="button"
+              disabled={isTesting}
+              onClick={() => handleTestConnection(supabaseUrl, supabaseKey)}
+              className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin' : ''}`} />
+              <span>Verificar si ya se creó la tabla</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Notifications */}
       {statusMsg && (

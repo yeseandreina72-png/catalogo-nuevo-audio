@@ -62,11 +62,39 @@ export function extractProjectUrlFromKey(key: string): string | null {
 }
 
 /**
- * Retrieves current Supabase credentials from environment or local storage.
+ * Retrieves current Supabase credentials from environment, URL sync params, or local storage.
  */
 export function getSupabaseConfig(): { url: string; anonKey: string } {
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
   const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+
+  // Check URL parameters for seamless cross-device configuration (e.g. scanning QR or link from mobile)
+  if (typeof window !== 'undefined') {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashString = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '';
+      const hashParams = new URLSearchParams(hashString);
+      
+      const paramUrl = searchParams.get('sb_url') || hashParams.get('sb_url');
+      const paramKey = searchParams.get('sb_key') || hashParams.get('sb_key');
+
+      if (paramUrl && paramKey) {
+        const cleanU = cleanSupabaseUrl(paramUrl);
+        const cleanK = cleanSupabaseKey(paramKey);
+        if (cleanU && cleanK) {
+          localStorage.setItem(STORAGE_SUPABASE_URL_KEY, cleanU);
+          localStorage.setItem(STORAGE_SUPABASE_KEY_KEY, cleanK);
+          // Clean the URL hash without reloading page
+          if (window.history && window.history.replaceState) {
+            const cleanUrl = window.location.pathname + window.location.search.replace(/[?&]sb_url=[^&]+/g, '').replace(/[?&]sb_key=[^&]+/g, '');
+            window.history.replaceState({}, document.title, cleanUrl);
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   const localUrl = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_SUPABASE_URL_KEY) || '' : '';
   const localKey = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_SUPABASE_KEY_KEY) || '' : '';
@@ -84,6 +112,18 @@ export function getSupabaseConfig(): { url: string; anonKey: string } {
   }
 
   return { url, anonKey };
+}
+
+/**
+ * Generates a direct cross-device synchronization link to easily connect mobile phones or other PCs
+ */
+export function generateDeviceSyncUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const { url, anonKey } = getSupabaseConfig();
+  if (!url || !anonKey) return '';
+  const origin = window.location.origin;
+  const pathname = window.location.pathname;
+  return `${origin}${pathname}#sb_url=${encodeURIComponent(url)}&sb_key=${encodeURIComponent(anonKey)}`;
 }
 
 /**

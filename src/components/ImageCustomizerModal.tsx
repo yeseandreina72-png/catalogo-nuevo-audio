@@ -363,9 +363,9 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
             <button
               type="button"
               onClick={() => setMainTab('database')}
-              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[11px] shrink-0 transition-colors cursor-pointer"
+              className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[11px] shrink-0 transition-colors cursor-pointer self-stretch sm:self-auto text-center shadow-sm"
             >
-              Crear Tabla en 1 Clic
+              Crear Tabla en Supabase (Ver Pasos)
             </button>
           </div>
         )}
