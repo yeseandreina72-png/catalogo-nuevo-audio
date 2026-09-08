@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   Upload,
@@ -21,6 +21,9 @@ import {
   CheckCheck,
   Database,
   Radio,
+  AlertCircle,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import { EquipmentItem, ServiceCategory } from '../types';
 import { AVAILABLE_PUBLIC_IMAGES, CATEGORIES } from '../data/catalogData';
@@ -28,7 +31,12 @@ import { SafeImage } from './SafeImage';
 import { compressImage, matchFilenameToEquipmentId } from '../utils/imageUtils';
 import { downloadBackupJSON, parseBackupFile } from '../utils/persistentStorage';
 import { SupabaseSyncTab } from './SupabaseSyncTab';
-import { isSupabaseConfigured } from '../lib/supabase';
+import {
+  isSupabaseConfigured,
+  saveImageToSupabase,
+  saveBatchImagesToSupabase,
+  testSupabaseConnection,
+} from '../lib/supabase';
 
 interface ImageCustomizerModalProps {
   isOpen: boolean;
@@ -56,11 +64,30 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [activeUploadItem, setActiveUploadItem] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'list' | 'editor'>('list');
+  const [dbStatus, setDbStatus] = useState<{
+    checked: boolean;
+    connected: boolean;
+    tableExists: boolean;
+    message?: string;
+  }>({ checked: false, connected: false, tableExists: false });
 
   const singleFileInputRef = useRef<HTMLInputElement>(null);
   const itemSpecificInputRef = useRef<HTMLInputElement>(null);
   const batchInputRef = useRef<HTMLInputElement>(null);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      testSupabaseConnection().then((res) => {
+        setDbStatus({
+          checked: true,
+          connected: res.success,
+          tableExists: Boolean(res.tableExists),
+          message: res.message,
+        });
+      });
+    }
+  }, [isOpen, mainTab]);
 
   if (!isOpen) return null;
 
@@ -76,8 +103,19 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
       const compressed = await compressImage(file);
       onUpdateItemImage(targetItemId, compressed);
       const targetItem = items.find((it) => it.id === targetItemId);
-      setSuccessMsg(`¡Foto optimizada y guardada para "${targetItem?.name || targetItemId}"! Se sincronizó con el servidor y tu navegador.`);
-      setTimeout(() => setSuccessMsg(''), 5500);
+
+      // Direct cloud sync check
+      const cloudRes = await saveImageToSupabase(targetItemId, compressed);
+      if (cloudRes.success) {
+        setSuccessMsg(`✅ ¡Foto guardada y sincronizada en la Nube Supabase para "${targetItem?.name || targetItemId}"! Se verá en cualquier teléfono o computadora.`);
+        setDbStatus((prev) => ({ ...prev, checked: true, connected: true, tableExists: true }));
+      } else if (cloudRes.tableMissing) {
+        setSuccessMsg(`⚠️ Foto guardada en tu dispositivo actual, pero falta crear la tabla "equipment_images" en Supabase para sincronizar con otros celulares. Haz clic en "2. Base de Datos".`);
+        setDbStatus((prev) => ({ ...prev, checked: true, connected: true, tableExists: false }));
+      } else {
+        setSuccessMsg(`¡Foto optimizada y guardada para "${targetItem?.name || targetItemId}"!`);
+      }
+      setTimeout(() => setSuccessMsg(''), 6500);
     } catch (err) {
       console.error(err);
     } finally {
@@ -91,6 +129,7 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
     setIsProcessing(true);
     let matchCount = 0;
     const fileList = Array.from(files);
+    const newImages: Record<string, string> = {};
 
     for (const file of fileList) {
       const matchedItemId = matchFilenameToEquipmentId(file.name);
@@ -100,6 +139,7 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
         try {
           const compressed = await compressImage(file);
           onUpdateItemImage(targetId, compressed);
+          newImages[targetId] = compressed;
           matchCount++;
         } catch (err) {
           console.error(`Error procesando ${file.name}`, err);
@@ -107,9 +147,21 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
       }
     }
 
+    if (Object.keys(newImages).length > 0) {
+      const cloudBatch = await saveBatchImagesToSupabase(newImages);
+      if (cloudBatch.success) {
+        setSuccessMsg(`✅ ¡${matchCount} imagen(es) guardadas y sincronizadas en la Nube de Supabase para todos los dispositivos!`);
+        setDbStatus((prev) => ({ ...prev, checked: true, connected: true, tableExists: true }));
+      } else if (cloudBatch.tableMissing) {
+        setSuccessMsg(`⚠️ ${matchCount} imagen(es) guardadas localmente, pero falta crear la tabla en Supabase para sincronizar con otros celulares.`);
+        setDbStatus((prev) => ({ ...prev, checked: true, connected: true, tableExists: false }));
+      } else {
+        setSuccessMsg(`¡${matchCount} imagen(es) procesadas y guardadas!`);
+      }
+      setTimeout(() => setSuccessMsg(''), 6500);
+    }
+
     setIsProcessing(false);
-    setSuccessMsg(`¡${matchCount} imagen(es) procesadas y guardadas permanentemente para todos los dispositivos!`);
-    setTimeout(() => setSuccessMsg(''), 6000);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -120,20 +172,32 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
     }
   };
 
-  const handleUrlSubmit = (e: React.FormEvent) => {
+  const handleUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (customUrl.trim() && activeItem) {
-      onUpdateItemImage(activeItem.id, customUrl.trim());
+      const urlToSave = customUrl.trim();
+      onUpdateItemImage(activeItem.id, urlToSave);
       setCustomUrl('');
-      setSuccessMsg(`¡Foto asignada y guardada para "${activeItem.name}"!`);
+
+      const cloudRes = await saveImageToSupabase(activeItem.id, urlToSave);
+      if (cloudRes.success) {
+        setSuccessMsg(`✅ ¡Foto asignada y guardada en Supabase para "${activeItem.name}"!`);
+      } else {
+        setSuccessMsg(`¡Foto asignada y guardada para "${activeItem.name}"!`);
+      }
       setTimeout(() => setSuccessMsg(''), 4500);
     }
   };
 
-  const handleSelectPresetPublicImage = (path: string) => {
+  const handleSelectPresetPublicImage = async (path: string) => {
     if (activeItem) {
       onUpdateItemImage(activeItem.id, path);
-      setSuccessMsg(`¡Imagen ${path} asignada y guardada permanentemente para "${activeItem.name}"!`);
+      const cloudRes = await saveImageToSupabase(activeItem.id, path);
+      if (cloudRes.success) {
+        setSuccessMsg(`✅ ¡Imagen ${path} asignada y sincronizada en Supabase para "${activeItem.name}"!`);
+      } else {
+        setSuccessMsg(`¡Imagen ${path} asignada y guardada para "${activeItem.name}"!`);
+      }
       setTimeout(() => setSuccessMsg(''), 4500);
     }
   };
@@ -279,11 +343,46 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
           >
             <Database className="w-3.5 h-3.5" />
             <span>2. Base de Datos (Supabase)</span>
-            {isSupabaseConfigured() && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Supabase Activo" />
+            {dbStatus.tableExists ? (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Supabase Activo & Sincronizado" />
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" title="Falta Crear Tabla" />
             )}
           </button>
         </div>
+
+        {/* Database Status Banner */}
+        {dbStatus.checked && !dbStatus.tableExists && (
+          <div className="mb-3 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-amber-300 shrink-0">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                <strong>Atención:</strong> Las fotos que cambies solo se guardan en este dispositivo porque falta crear la tabla en Supabase.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMainTab('database')}
+              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[11px] shrink-0 transition-colors cursor-pointer"
+            >
+              Crear Tabla en 1 Clic
+            </button>
+          </div>
+        )}
+
+        {dbStatus.checked && dbStatus.tableExists && (
+          <div className="mb-3 p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-2 text-xs text-emerald-300 shrink-0">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>
+                <strong>Nube Supabase Activa:</strong> Cualquier foto que subas o cambies se sincroniza al instante con todos los celulares y computadoras.
+              </span>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold hidden sm:inline-block">
+              Sincronización Global
+            </span>
+          </div>
+        )}
 
         {mainTab === 'database' ? (
           <div className="flex-1 overflow-y-auto pr-1">

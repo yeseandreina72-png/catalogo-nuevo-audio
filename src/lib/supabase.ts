@@ -3,6 +3,9 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const STORAGE_SUPABASE_URL_KEY = 'nuevo_audio_supabase_url';
 const STORAGE_SUPABASE_KEY_KEY = 'nuevo_audio_supabase_anon_key';
 
+export const DEFAULT_SUPABASE_URL = 'https://ivwugbfbxooothwmczqj.supabase.co';
+export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3VnYmZieG9vb3RobndtY3pqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNzE0MjcsImV4cCI6MjEwMzk0NzQyN30.ND053G5YslT2--uPkYcVf3KJzTOHTLDb4i9RBgvMXJg';
+
 let cachedClient: SupabaseClient | null = null;
 let lastUsedUrl = '';
 let lastUsedKey = '';
@@ -68,8 +71,8 @@ export function getSupabaseConfig(): { url: string; anonKey: string } {
   const localUrl = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_SUPABASE_URL_KEY) || '' : '';
   const localKey = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_SUPABASE_KEY_KEY) || '' : '';
 
-  let url = cleanSupabaseUrl(localUrl || envUrl);
-  const anonKey = cleanSupabaseKey(localKey || envKey);
+  let url = cleanSupabaseUrl(localUrl || envUrl || DEFAULT_SUPABASE_URL);
+  let anonKey = cleanSupabaseKey(localKey || envKey || DEFAULT_SUPABASE_ANON_KEY);
 
   // If key has project ref, auto-align URL
   const matchedUrl = extractProjectUrlFromKey(anonKey);
@@ -236,12 +239,27 @@ export async function fetchImagesFromSupabase(): Promise<Record<string, string>>
   return {};
 }
 
+export interface CloudSaveResponse {
+  success: boolean;
+  tableMissing?: boolean;
+  savedCount?: number;
+  error?: string;
+}
+
 /**
  * Saves a single image to Supabase `equipment_images` table.
  */
-export async function saveImageToSupabase(itemId: string, imageUrl: string): Promise<boolean> {
+export async function saveImageToSupabase(
+  itemId: string,
+  imageUrl: string
+): Promise<CloudSaveResponse> {
   const client = getSupabaseClient();
-  if (!client) return false;
+  if (!client) {
+    return {
+      success: false,
+      error: 'Supabase no está configurado aún.',
+    };
+  }
 
   try {
     const { error } = await client
@@ -256,31 +274,48 @@ export async function saveImageToSupabase(itemId: string, imageUrl: string): Pro
       );
 
     if (error) {
-      console.warn(`Error al guardar ${itemId} en Supabase:`, error.message);
-      return false;
+      console.warn(`Error al guardar ${itemId} en Supabase:`, error);
+      const isTableMissing =
+        error.code === '42P01' ||
+        (error.message && error.message.toLowerCase().includes('does not exist'));
+
+      return {
+        success: false,
+        tableMissing: isTableMissing,
+        error: isTableMissing
+          ? 'La tabla "equipment_images" no existe en tu Supabase. Ve a "Base de Datos" y ejecuta el SQL en 1 clic.'
+          : error.message,
+      };
     }
-    return true;
-  } catch (err) {
+    return { success: true, savedCount: 1 };
+  } catch (err: any) {
     console.warn('Excepción al enviar imagen a Supabase:', err);
-    return false;
+    return {
+      success: false,
+      error: err?.message || 'Error de conexión con Supabase',
+    };
   }
 }
 
 /**
  * Saves a batch of images to Supabase in parallel individual calls to avoid payload size errors.
  */
-export async function saveBatchImagesToSupabase(imagesMap: Record<string, string>): Promise<boolean> {
+export async function saveBatchImagesToSupabase(
+  imagesMap: Record<string, string>
+): Promise<CloudSaveResponse> {
   const client = getSupabaseClient();
-  if (!client) return false;
+  if (!client) {
+    return { success: false, error: 'Supabase no está configurado aún.' };
+  }
 
-  const entries = Object.entries(imagesMap);
-  if (entries.length === 0) return true;
+  const entries = Object.entries(imagesMap).filter(([_, url]) => Boolean(url && url.trim()));
+  if (entries.length === 0) return { success: true, savedCount: 0 };
 
-  let allSuccess = true;
+  let successCount = 0;
+  let tableMissingDetected = false;
+  let lastError = '';
 
-  // Save each image individually so base64 strings never exceed HTTP request limits
   for (const [id, image_url] of entries) {
-    if (!id || !image_url) continue;
     try {
       const { error } = await client
         .from('equipment_images')
@@ -294,16 +329,31 @@ export async function saveBatchImagesToSupabase(imagesMap: Record<string, string
         );
 
       if (error) {
-        console.warn(`Error al guardar imagen "${id}" en Supabase:`, error.message);
-        allSuccess = false;
+        console.warn(`Error al guardar imagen "${id}" en Supabase:`, error);
+        if (
+          error.code === '42P01' ||
+          (error.message && error.message.toLowerCase().includes('does not exist'))
+        ) {
+          tableMissingDetected = true;
+        }
+        lastError = error.message;
+      } else {
+        successCount++;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn(`Excepción al guardar imagen "${id}" en Supabase:`, err);
-      allSuccess = false;
+      lastError = err?.message || 'Error de red';
     }
   }
 
-  return allSuccess;
+  return {
+    success: successCount > 0 || entries.length === 0,
+    savedCount: successCount,
+    tableMissing: tableMissingDetected,
+    error: tableMissingDetected
+      ? 'La tabla "equipment_images" no existe en Supabase. Ejecuta el SQL para crearla.'
+      : lastError || undefined,
+  };
 }
 
 /**

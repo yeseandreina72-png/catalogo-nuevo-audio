@@ -43,12 +43,15 @@ async function startServer() {
     }
   }
 
+  const DEFAULT_SUPABASE_URL = "https://ivwugbfbxooothwmczqj.supabase.co";
+  const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3VnYmZieG9vb3RobndtY3pqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNzE0MjcsImV4cCI6MjEwMzk0NzQyN30.ND053G5YslT2--uPkYcVf3KJzTOHTLDb4i9RBgvMXJg";
+
   function getSupabaseServerConfig() {
     try {
       if (fs.existsSync(CONFIG_FILE)) {
         const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
         const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object") {
+        if (parsed && typeof parsed === "object" && parsed.url && parsed.anonKey) {
           return parsed;
         }
       }
@@ -56,8 +59,8 @@ async function startServer() {
       console.error("Error reading supabase config file:", e);
     }
     return {
-      url: process.env.VITE_SUPABASE_URL || "",
-      anonKey: process.env.VITE_SUPABASE_ANON_KEY || "",
+      url: process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL,
+      anonKey: process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY,
     };
   }
 
