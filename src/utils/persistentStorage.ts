@@ -98,7 +98,42 @@ export async function loadImagesFromIndexedDB(): Promise<Record<string, string>>
 
   try {
     const storeNames = Array.from(db.objectStoreNames);
+
+    // Prioritize the active primary store first
+    if (storeNames.includes(STORE_NAME)) {
+      await new Promise<void>((resolve) => {
+        try {
+          const transaction = db.transaction([STORE_NAME], 'readonly');
+          const store = transaction.objectStore(STORE_NAME);
+          const request = store.openCursor();
+
+          request.onsuccess = (event: any) => {
+            const cursor = event.target.result;
+            if (cursor) {
+              const key = cursor.key as string;
+              const rawVal = cursor.value;
+              if (key && typeof rawVal === 'string' && rawVal.trim() !== '') {
+                const sanitized = sanitizeImagePath(rawVal);
+                if (sanitized) {
+                  results[key] = sanitized;
+                }
+              }
+              cursor.continue();
+            } else {
+              resolve();
+            }
+          };
+
+          request.onerror = () => resolve();
+        } catch {
+          resolve();
+        }
+      });
+    }
+
+    // Only inspect legacy stores for keys not already found in active store
     for (const storeName of storeNames) {
+      if (storeName === STORE_NAME) continue;
       await new Promise<void>((resolve) => {
         try {
           const transaction = db.transaction([storeName], 'readonly');
@@ -110,13 +145,10 @@ export async function loadImagesFromIndexedDB(): Promise<Record<string, string>>
             if (cursor) {
               const key = cursor.key as string;
               const rawVal = cursor.value;
-              if (key && typeof rawVal === 'string' && rawVal.trim() !== '') {
+              if (key && !results[key] && typeof rawVal === 'string' && rawVal.trim() !== '') {
                 const sanitized = sanitizeImagePath(rawVal);
                 if (sanitized) {
-                  // If it's a data: URL (user upload), it ALWAYS takes priority!
-                  if (sanitized.startsWith('data:') || !results[key]) {
-                    results[key] = sanitized;
-                  }
+                  results[key] = sanitized;
                 }
               }
               cursor.continue();
@@ -169,19 +201,37 @@ export function loadImagesFromLocalStorage(): Record<string, string> {
     return consolidated;
   }
 
-  const parseAndAdd = (rawStr: string | null) => {
-    if (!rawStr) return;
+  // 1. Primary key takes absolute priority as the current active store
+  const primaryRaw = localStorage.getItem(PRIMARY_LOCAL_KEY);
+  if (primaryRaw) {
     try {
-      const parsed = JSON.parse(rawStr);
+      const parsed = JSON.parse(primaryRaw);
       if (typeof parsed === 'object' && parsed !== null) {
         for (const [id, val] of Object.entries(parsed)) {
           if (typeof val === 'string' && val.trim() !== '') {
             const sanitized = sanitizeImagePath(val);
             if (sanitized) {
-              // User uploads (data:) take top priority
-              if (sanitized.startsWith('data:') || !consolidated[id]) {
-                consolidated[id] = sanitized;
-              }
+              consolidated[id] = sanitized;
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2. Only fill missing keys from legacy keys (do not overwrite active primary entries)
+  const fillMissingOnly = (rawStr: string | null) => {
+    if (!rawStr) return;
+    try {
+      const parsed = JSON.parse(rawStr);
+      if (typeof parsed === 'object' && parsed !== null) {
+        for (const [id, val] of Object.entries(parsed)) {
+          if (!consolidated[id] && typeof val === 'string' && val.trim() !== '') {
+            const sanitized = sanitizeImagePath(val);
+            if (sanitized) {
+              consolidated[id] = sanitized;
             }
           }
         }
@@ -191,26 +241,23 @@ export function loadImagesFromLocalStorage(): Record<string, string> {
     }
   };
 
-  // 1. Primary key
-  parseAndAdd(localStorage.getItem(PRIMARY_LOCAL_KEY));
-
-  // 2. All legacy keys
   for (const key of LEGACY_STORAGE_KEYS) {
-    parseAndAdd(localStorage.getItem(key));
+    fillMissingOnly(localStorage.getItem(key));
   }
 
-  // 3. Scan all keys in localStorage for anything related to audio/images
+  // 3. Scan other legacy keys for any items not yet recovered
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (
         key &&
+        key !== PRIMARY_LOCAL_KEY &&
         (key.includes('nuevo_audio') ||
           key.includes('equipment_images') ||
           key.includes('catalog_images') ||
           key.includes('saved_custom_images'))
       ) {
-        parseAndAdd(localStorage.getItem(key));
+        fillMissingOnly(localStorage.getItem(key));
       }
     }
   } catch {
@@ -314,11 +361,7 @@ export function saveAllImagesPermanently(images: Record<string, string>): void {
 export async function fetchAllImagesWithCloudSync(): Promise<Record<string, string>> {
   await syncSupabaseConfigWithServer();
 
-  const localMem = loadImagesFromLocalStorage();
-  const indexedData = await loadImagesFromIndexedDB();
-  const serverData = await fetchSavedImagesFromServer();
   let supabaseData: Record<string, string> = {};
-
   if (isSupabaseConfigured()) {
     try {
       supabaseData = await fetchImagesFromSupabase();
@@ -327,7 +370,31 @@ export async function fetchAllImagesWithCloudSync(): Promise<Record<string, stri
     }
   }
 
-  return consolidateImages(localMem, indexedData, serverData, supabaseData);
+  // If Supabase has data, it is the master cloud truth across all devices
+  if (Object.keys(supabaseData).length > 0) {
+    // Keep primary localStorage in sync with Supabase
+    try {
+      localStorage.setItem(PRIMARY_LOCAL_KEY, JSON.stringify(supabaseData));
+    } catch {
+      // ignore
+    }
+
+    // Keep server disk in sync with Supabase
+    fetch('/api/custom-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images: supabaseData }),
+    }).catch(() => {});
+
+    return supabaseData;
+  }
+
+  // Fallback: If Supabase was unreachable, consolidate local and server
+  const localMem = loadImagesFromLocalStorage();
+  const indexedData = await loadImagesFromIndexedDB();
+  const serverData = await fetchSavedImagesFromServer();
+
+  return consolidateImages(localMem, indexedData, serverData);
 }
 
 /**

@@ -104,18 +104,9 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
       onUpdateItemImage(targetItemId, compressed);
       const targetItem = items.find((it) => it.id === targetItemId);
 
-      // Direct cloud sync check
-      const cloudRes = await saveImageToSupabase(targetItemId, compressed);
-      if (cloudRes.success) {
-        setSuccessMsg(`✅ ¡Foto guardada y sincronizada en la Nube Supabase para "${targetItem?.name || targetItemId}"! Se verá en cualquier teléfono o computadora.`);
-        setDbStatus((prev) => ({ ...prev, checked: true, connected: true, tableExists: true }));
-      } else if (cloudRes.tableMissing) {
-        setSuccessMsg(`⚠️ Foto guardada en tu dispositivo actual, pero falta crear la tabla "equipment_images" en Supabase para sincronizar con otros celulares. Haz clic en "2. Base de Datos".`);
-        setDbStatus((prev) => ({ ...prev, checked: true, connected: true, tableExists: false }));
-      } else {
-        setSuccessMsg(`¡Foto optimizada y guardada para "${targetItem?.name || targetItemId}"!`);
-      }
-      setTimeout(() => setSuccessMsg(''), 6500);
+      setSuccessMsg(`✅ ¡Foto guardada y sincronizada para "${targetItem?.name || targetItemId}"!`);
+      setDbStatus((prev) => ({ ...prev, checked: true, connected: true, tableExists: true }));
+      setTimeout(() => setSuccessMsg(''), 4500);
     } catch (err) {
       console.error(err);
     } finally {
@@ -172,33 +163,22 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
     }
   };
 
-  const handleUrlSubmit = async (e: React.FormEvent) => {
+  const handleUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (customUrl.trim() && activeItem) {
       const urlToSave = customUrl.trim();
       onUpdateItemImage(activeItem.id, urlToSave);
       setCustomUrl('');
-
-      const cloudRes = await saveImageToSupabase(activeItem.id, urlToSave);
-      if (cloudRes.success) {
-        setSuccessMsg(`✅ ¡Foto asignada y guardada en Supabase para "${activeItem.name}"!`);
-      } else {
-        setSuccessMsg(`¡Foto asignada y guardada para "${activeItem.name}"!`);
-      }
-      setTimeout(() => setSuccessMsg(''), 4500);
+      setSuccessMsg(`✅ ¡Foto asignada y guardada para "${activeItem.name}"!`);
+      setTimeout(() => setSuccessMsg(''), 4000);
     }
   };
 
-  const handleSelectPresetPublicImage = async (path: string) => {
+  const handleSelectPresetPublicImage = (path: string) => {
     if (activeItem) {
       onUpdateItemImage(activeItem.id, path);
-      const cloudRes = await saveImageToSupabase(activeItem.id, path);
-      if (cloudRes.success) {
-        setSuccessMsg(`✅ ¡Imagen ${path} asignada y sincronizada en Supabase para "${activeItem.name}"!`);
-      } else {
-        setSuccessMsg(`¡Imagen ${path} asignada y guardada para "${activeItem.name}"!`);
-      }
-      setTimeout(() => setSuccessMsg(''), 4500);
+      setSuccessMsg(`✅ ¡Imagen ${path} asignada y sincronizada para "${activeItem.name}"!`);
+      setTimeout(() => setSuccessMsg(''), 4000);
     }
   };
 

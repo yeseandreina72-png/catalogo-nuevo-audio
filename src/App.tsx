@@ -17,8 +17,9 @@ import {
   fetchAllImagesWithCloudSync,
   saveImageToIndexedDB,
   sanitizeImagePath,
+  PRIMARY_LOCAL_KEY,
 } from './utils/persistentStorage';
-import { subscribeToSupabaseImages } from './lib/supabase';
+import { subscribeToSupabaseImages, saveImageToSupabase, isSupabaseConfigured } from './lib/supabase';
 
 export default function App() {
   // Synchronous first render using consolidated local storage (covers all keys & versions)
@@ -64,46 +65,76 @@ export default function App() {
 
   // Asynchronous recovery from Supabase Cloud DB, IndexedDB, and server synchronization
   useEffect(() => {
+    let isMounted = true;
+
     async function syncStorage() {
       try {
         const consolidated = await fetchAllImagesWithCloudSync();
 
-        if (Object.keys(consolidated).length > 0) {
-          setItems((prev) =>
-            prev.map((item) => {
-              const userImg = consolidated[item.id];
-              if (userImg && typeof userImg === 'string' && userImg.trim() !== '') {
-                return { ...item, image: userImg };
-              }
-              return item;
-            })
-          );
-        }
+        if (!isMounted || !consolidated || Object.keys(consolidated).length === 0) return;
+
+        setItems((prev) => {
+          let hasDiff = false;
+          const updated = prev.map((item) => {
+            const userImg = consolidated[item.id];
+            if (
+              userImg &&
+              typeof userImg === 'string' &&
+              userImg.trim() !== '' &&
+              userImg !== item.image
+            ) {
+              hasDiff = true;
+              return { ...item, image: userImg };
+            }
+            return item;
+          });
+
+          return hasDiff ? updated : prev;
+        });
       } catch (e) {
         console.error('Error during cloud/local image sync:', e);
       }
     }
 
+    // Initial sync on mount
     syncStorage();
 
-    // Subscribe to real-time changes from Supabase
+    // Subscribe to real-time changes from Supabase (instant websocket push)
     const unsubscribe = subscribeToSupabaseImages((itemId, newUrl) => {
       if (itemId && newUrl) {
-        setItems((prev) =>
-          prev.map((it) => (it.id === itemId ? { ...it, image: newUrl } : it))
-        );
+        setItems((prev) => {
+          const existing = prev.find((it) => it.id === itemId);
+          if (existing && existing.image === newUrl) {
+            return prev;
+          }
+          return prev.map((it) => (it.id === itemId ? { ...it, image: newUrl } : it));
+        });
         saveImageToIndexedDB(itemId, newUrl).catch(() => {});
+        try {
+          const current = loadImagesFromLocalStorage();
+          current[itemId] = newUrl;
+          localStorage.setItem(PRIMARY_LOCAL_KEY, JSON.stringify(current));
+        } catch {
+          // ignore
+        }
       }
     });
 
-    // Auto-sync periodically or when window comes into focus
-    const interval = setInterval(syncStorage, 5000);
-    window.addEventListener('focus', syncStorage);
+    // Throttled sync on window focus (at most once every 30 seconds when refocusing)
+    let lastFocusSync = Date.now();
+    const handleFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusSync > 30000) {
+        lastFocusSync = now;
+        syncStorage();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
 
     return () => {
+      isMounted = false;
       if (unsubscribe) unsubscribe();
-      clearInterval(interval);
-      window.removeEventListener('focus', syncStorage);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
@@ -112,21 +143,38 @@ export default function App() {
     if (!newUrl || newUrl.trim() === '') return;
 
     setItems((prev) => {
-      const updated = prev.map((item) =>
+      const target = prev.find((it) => it.id === itemId);
+      if (target && target.image === newUrl) {
+        return prev;
+      }
+      return prev.map((item) =>
         item.id === itemId ? { ...item, image: newUrl } : item
       );
-
-      // Build map of current equipment images
-      const imageMap: Record<string, string> = {};
-      updated.forEach((it) => {
-        imageMap[it.id] = it.image;
-      });
-
-      // Save permanently to storage systems and server
-      saveAllImagesPermanently(imageMap);
-
-      return updated;
     });
+
+    // 1. IndexedDB
+    saveImageToIndexedDB(itemId, newUrl).catch(() => {});
+
+    // 2. Primary localStorage
+    try {
+      const current = loadImagesFromLocalStorage();
+      current[itemId] = newUrl;
+      localStorage.setItem(PRIMARY_LOCAL_KEY, JSON.stringify(current));
+    } catch {
+      // ignore
+    }
+
+    // 3. Supabase Cloud DB (single upsert, prevents 15-item cascade and realtime storm)
+    if (isSupabaseConfigured()) {
+      saveImageToSupabase(itemId, newUrl).catch(() => {});
+    }
+
+    // 4. Server disk
+    fetch('/api/custom-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images: { [itemId]: newUrl } }),
+    }).catch(() => {});
 
     if (activeModalItem && activeModalItem.id === itemId) {
       setActiveModalItem((prev) => (prev ? { ...prev, image: newUrl } : null));
