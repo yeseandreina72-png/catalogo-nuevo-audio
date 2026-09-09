@@ -43,8 +43,10 @@ async function startServer() {
     }
   }
 
-  const DEFAULT_SUPABASE_URL = "https://ivwugbfbxooothwmczqj.supabase.co";
-  const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3VnYmZieG9vb3RobndtY3pqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNzE0MjcsImV4cCI6MjEwMzk0NzQyN30.ND053G5YslT2--uPkYcVf3KJzTOHTLDb4i9RBgvMXJg";
+  const SUPABASE_TS_FILE = path.join(process.cwd(), "src", "lib", "supabase.ts");
+
+  let DEFAULT_SUPABASE_URL = "https://bwztzqzybhtumawqrbjb.supabase.co";
+  let DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3enR6cXp5Ymh0dW1hd3FyYmpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNjkwMDYsImV4cCI6MjEwMzk0NTAwNn0.v1Y72xnxkc7FHj2vnYu31T3I34sz0bUq2RlbHWOPYYo";
 
   function getSupabaseServerConfig() {
     try {
@@ -71,6 +73,23 @@ async function startServer() {
         fs.mkdirSync(dir, { recursive: true });
       }
       fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8");
+
+      DEFAULT_SUPABASE_URL = config.url;
+      DEFAULT_SUPABASE_ANON_KEY = config.anonKey;
+
+      // Also persist directly into src/lib/supabase.ts so any build/Vercel deployment includes it by default
+      if (fs.existsSync(SUPABASE_TS_FILE)) {
+        let tsContent = fs.readFileSync(SUPABASE_TS_FILE, "utf-8");
+        tsContent = tsContent.replace(
+          /export const DEFAULT_SUPABASE_URL = ['"][^'"]*['"];/,
+          `export const DEFAULT_SUPABASE_URL = '${config.url}';`
+        );
+        tsContent = tsContent.replace(
+          /export const DEFAULT_SUPABASE_ANON_KEY = ['"][^'"]*['"];/,
+          `export const DEFAULT_SUPABASE_ANON_KEY = '${config.anonKey}';`
+        );
+        fs.writeFileSync(SUPABASE_TS_FILE, tsContent, "utf-8");
+      }
     } catch (e) {
       console.error("Error writing supabase config file:", e);
     }

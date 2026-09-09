@@ -3,8 +3,8 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const STORAGE_SUPABASE_URL_KEY = 'nuevo_audio_supabase_url';
 const STORAGE_SUPABASE_KEY_KEY = 'nuevo_audio_supabase_anon_key';
 
-export const DEFAULT_SUPABASE_URL = 'https://ivwugbfbxooothwmczqj.supabase.co';
-export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3VnYmZieG9vb3RobndtY3pqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNzE0MjcsImV4cCI6MjEwMzk0NzQyN30.ND053G5YslT2--uPkYcVf3KJzTOHTLDb4i9RBgvMXJg';
+export const DEFAULT_SUPABASE_URL = 'https://bwztzqzybhtumawqrbjb.supabase.co';
+export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3enR6cXp5Ymh0dW1hd3FyYmpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNjkwMDYsImV4cCI6MjEwMzk0NTAwNn0.v1Y72xnxkc7FHj2vnYu31T3I34sz0bUq2RlbHWOPYYo';
 
 let cachedClient: SupabaseClient | null = null;
 let lastUsedUrl = '';
@@ -84,6 +84,9 @@ export function getSupabaseConfig(): { url: string; anonKey: string } {
         if (cleanU && cleanK) {
           localStorage.setItem(STORAGE_SUPABASE_URL_KEY, cleanU);
           localStorage.setItem(STORAGE_SUPABASE_KEY_KEY, cleanK);
+          cachedClient = null;
+          lastUsedUrl = '';
+          lastUsedKey = '';
           // Clean the URL hash without reloading page
           if (window.history && window.history.replaceState) {
             const cleanUrl = window.location.pathname + window.location.search.replace(/[?&]sb_url=[^&]+/g, '').replace(/[?&]sb_key=[^&]+/g, '');
@@ -97,7 +100,24 @@ export function getSupabaseConfig(): { url: string; anonKey: string } {
   }
 
   const localUrl = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_SUPABASE_URL_KEY) || '' : '';
-  const localKey = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_SUPABASE_KEY_KEY) || '' : '';
+  let localKey = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_SUPABASE_KEY_KEY) || '' : '';
+
+  // AUTOMATIC PURGE: If this device has an obsolete test key (sb_publishable_...),
+  // corrupt key, or key from the previous deleted project (ivwugbfbxooothwmczqj),
+  // wipe it immediately so the device seamlessly falls back to the official project key without errors!
+  if (
+    localKey &&
+    (localKey.startsWith('sb_publishable_') ||
+      !localKey.startsWith('eyJ') ||
+      localKey.includes('ivwugbfbxooothwmczqj') ||
+      (localUrl && localUrl.includes('ivwugbfbxooothwmczqj')))
+  ) {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(STORAGE_SUPABASE_KEY_KEY);
+      localStorage.removeItem(STORAGE_SUPABASE_URL_KEY);
+    }
+    localKey = '';
+  }
 
   let url = cleanSupabaseUrl(localUrl || envUrl || DEFAULT_SUPABASE_URL);
   let anonKey = cleanSupabaseKey(localKey || envKey || DEFAULT_SUPABASE_ANON_KEY);
@@ -131,6 +151,7 @@ export function generateDeviceSyncUrl(): string {
  */
 export async function syncSupabaseConfigWithServer(): Promise<{ url: string; anonKey: string }> {
   try {
+    const local = getSupabaseConfig();
     const res = await fetch('/api/supabase-config');
     if (res.ok) {
       const data = await res.json();
@@ -148,6 +169,14 @@ export async function syncSupabaseConfigWithServer(): Promise<{ url: string; ano
           }
         }
         return { url, anonKey };
+      } else if (local.url && local.anonKey && local.anonKey.startsWith('eyJ')) {
+        // If the server doesn't have the key yet, but this device (e.g. computer) has it verified in localStorage,
+        // automatically upload it to the server and codebase so all other devices and builds receive it!
+        fetch('/api/supabase-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: local.url, anonKey: local.anonKey }),
+        }).catch(() => {});
       }
     }
   } catch {

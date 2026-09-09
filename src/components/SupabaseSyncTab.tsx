@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import {
   Database,
   CheckCircle2,
@@ -15,6 +16,11 @@ import {
   Eye,
   EyeOff,
   ClipboardPaste,
+  QrCode,
+  Smartphone,
+  Share2,
+  Trash2,
+  X,
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -66,6 +72,8 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [copiedSyncLink, setCopiedSyncLink] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
@@ -83,6 +91,31 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
       handleTestConnection(url, anonKey);
     }
   }, []);
+
+  const handleOpenQrModal = async () => {
+    const syncUrl = generateDeviceSyncUrl();
+    if (!syncUrl) {
+      setStatusMsg('Primero debes ingresar y guardar las credenciales en esta computadora.');
+      setTimeout(() => setStatusMsg(''), 4000);
+      return;
+    }
+    try {
+      const dataUrl = await QRCode.toDataURL(syncUrl, {
+        width: 320,
+        margin: 2,
+        color: {
+          dark: '#020617',
+          light: '#ffffff',
+        },
+      });
+      setQrCodeDataUrl(dataUrl);
+      setShowQrModal(true);
+    } catch (err) {
+      console.error('Error generando QR code:', err);
+      setStatusMsg('No se pudo generar el código QR.');
+      setTimeout(() => setStatusMsg(''), 3000);
+    }
+  };
 
   const handleSaveCredentials = () => {
     let cleanUrl = cleanSupabaseUrl(supabaseUrl);
@@ -208,7 +241,7 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
   const projectRef =
     extractProjectUrlFromKey(supabaseKey)?.replace('https://', '').replace('.supabase.co', '') ||
     supabaseUrl.replace('https://', '').replace('.supabase.co', '').split('/')[0] ||
-    'ivwugbfbxooothwmczqj';
+    'bwztzqzybhtumawqrbjb';
 
   const sqlEditorUrl = `https://supabase.com/dashboard/project/${projectRef}/sql/new`;
   const tableEditorUrl = `https://supabase.com/dashboard/project/${projectRef}/editor`;
@@ -244,11 +277,21 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
+            onClick={handleOpenQrModal}
+            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+            title="Escanear código QR con el celular para vincularlo al instante"
+          >
+            <QrCode className="w-4 h-4" />
+            <span>📱 Vincular Celular (Código QR)</span>
+          </button>
+          <button
+            type="button"
             onClick={handleCopySyncLink}
-            className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs font-semibold flex items-center gap-1.5 border border-cyan-500/40 transition-colors"
+            className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs font-semibold flex items-center gap-1.5 border border-cyan-500/40 transition-colors cursor-pointer"
             title="Copiar enlace para abrir en el celular ya configurado"
           >
-            <span>{copiedSyncLink ? '✓ Enlace Copiado' : '📲 Enlace para Celular'}</span>
+            <Share2 className="w-3.5 h-3.5" />
+            <span>{copiedSyncLink ? '✓ Enlace Copiado' : 'Copiar Enlace'}</span>
           </button>
           <a
             href={tableEditorUrl}
@@ -263,7 +306,7 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
             href={sqlEditorUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+            className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/40 transition-colors"
           >
             <span>SQL Editor</span>
             <ExternalLink className="w-3.5 h-3.5" />
@@ -407,6 +450,48 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
                 {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
             </div>
+
+            {supabaseKey.startsWith('sb_publishable_') && (
+              <div className="p-3 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs space-y-2 mt-2">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-red-300">
+                      Este dispositivo tiene guardada la clave obsoleta de prueba (sb_publishable_...)
+                    </p>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      Por esta razón este celular muestra el error rojo. Tu computadora ya tiene la clave correcta en verde.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSupabaseKey('');
+                      if (typeof window !== 'undefined') {
+                        localStorage.removeItem('nuevo_audio_supabase_anon_key');
+                      }
+                      setTestResult(null);
+                      setStatusMsg('Clave vieja borrada de este dispositivo. Ahora puedes escanear el QR o pegar la clave nueva.');
+                      setTimeout(() => setStatusMsg(''), 4000);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-red-500/30 hover:bg-red-500/40 text-red-200 font-bold text-xs border border-red-500/60 flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Borrar clave vieja de este celular</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePasteKey}
+                    className="px-2.5 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 font-semibold text-xs border border-cyan-500/40 flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <ClipboardPaste className="w-3.5 h-3.5" />
+                    <span>Pegar clave nueva (eyJ...)</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 pt-1">
@@ -534,6 +619,80 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
           </div>
         </div>
       </div>
+
+      {/* QR Code Modal for Mobile / Secondary Device Pairing */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-cyan-500/40 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative text-center space-y-4">
+            <button
+              type="button"
+              onClick={() => setShowQrModal(false)}
+              className="absolute right-4 top-4 p-2 text-slate-400 hover:text-white rounded-full bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 mx-auto">
+              <Smartphone className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-white">Vincular Celular con Supabase</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Escanea este código con la cámara de tu celular para que quede conectado en verde automáticamente.
+              </p>
+            </div>
+
+            {qrCodeDataUrl ? (
+              <div className="bg-white p-3 rounded-2xl inline-block mx-auto shadow-xl">
+                <img
+                  src={qrCodeDataUrl}
+                  alt="Código QR de Conexión a Supabase"
+                  className="w-56 h-56 rounded-lg mx-auto block"
+                />
+              </div>
+            ) : (
+              <div className="w-56 h-56 flex items-center justify-center mx-auto bg-slate-950 rounded-2xl border border-slate-800">
+                <RefreshCw className="w-6 h-6 animate-spin text-cyan-400" />
+              </div>
+            )}
+
+            <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300 text-left space-y-1.5">
+              <p className="font-bold text-cyan-300">Pasos en tu celular:</p>
+              <p className="text-slate-400 flex items-center gap-1.5">
+                <span className="w-4 h-4 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center text-[10px] font-bold shrink-0">1</span>
+                <span>Abre la app de <strong>Cámara</strong> de tu teléfono.</span>
+              </p>
+              <p className="text-slate-400 flex items-center gap-1.5">
+                <span className="w-4 h-4 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center text-[10px] font-bold shrink-0">2</span>
+                <span>Apunta a este código en tu pantalla.</span>
+              </p>
+              <p className="text-slate-400 flex items-center gap-1.5">
+                <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
+                <span>Toca la notificación: ¡Se conectará en verde sin tener que escribir nada!</span>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleCopySyncLink}
+                className="flex-1 py-2 px-3 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>{copiedSyncLink ? '¡Enlace Copiado!' : 'Copiar para WhatsApp'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowQrModal(false)}
+                className="py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
