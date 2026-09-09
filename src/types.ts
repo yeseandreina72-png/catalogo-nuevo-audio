@@ -4,6 +4,7 @@ export type ServiceCategory =
   | 'truss'
   | 'sonido'
   | 'iluminacion'
+  | 'robot-led'
   | 'pantallas'
   | 'efectos'
   | 'energia';

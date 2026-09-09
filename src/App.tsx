@@ -26,7 +26,7 @@ export default function App() {
   const [items, setItems] = useState<EquipmentItem[]>(() => {
     const saved = loadImagesFromLocalStorage();
     return INITIAL_ITEMS.map((item) => {
-      const userSaved = saved[item.id];
+      const userSaved = saved[item.id] || ((item.id === 'cabezales-moviles-pro' || item.id === 'show-robot-led') ? saved['cabezales-moviles-robot-led'] : undefined);
       if (userSaved && typeof userSaved === 'string' && userSaved.trim() !== '') {
         const clean = sanitizeImagePath(userSaved);
         if (clean) {
@@ -76,7 +76,7 @@ export default function App() {
         setItems((prev) => {
           let hasDiff = false;
           const updated = prev.map((item) => {
-            const userImg = consolidated[item.id];
+            const userImg = consolidated[item.id] || ((item.id === 'cabezales-moviles-pro' || item.id === 'show-robot-led') ? consolidated['cabezales-moviles-robot-led'] : undefined);
             if (
               userImg &&
               typeof userImg === 'string' &&

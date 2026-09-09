@@ -97,7 +97,7 @@ export const TrussAndRoofHighlight: React.FC<TrussAndRoofHighlightProps> = ({
                   className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyan-400 to-cyan-500 hover:from-cyan-300 hover:to-cyan-400 text-slate-950 font-extrabold text-sm shadow-lg shadow-cyan-500/25 transition-all flex items-center gap-2 group"
                 >
                   <Info className="w-4 h-4" />
-                  <span>Ver Ficha Técnica y Especificaciones de Montaje</span>
+                  <span>Ver Información del Techo Truss 10x10</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>

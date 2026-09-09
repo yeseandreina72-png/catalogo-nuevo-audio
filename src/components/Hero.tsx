@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronRight, Zap, Layers, Grid, Tv, Volume2 } from 'lucide-react';
+import { ChevronRight, Zap, Layers, Grid, Tv, Volume2, Flame } from 'lucide-react';
 import { COMPANY_INFO } from '../data/catalogData';
 
 export const Hero: React.FC = () => {
@@ -83,13 +83,16 @@ export const Hero: React.FC = () => {
               <Grid className="w-3.5 h-3.5 text-cyan-400" /> Techo Truss 10x10 Lona Negra
             </span>
             <span className="px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/80 flex items-center gap-1.5">
-              <Volume2 className="w-3.5 h-3.5 text-cyan-400" /> Sonido & Monitores
+              <Volume2 className="w-3.5 h-3.5 text-cyan-400" /> Sonido Móvil
             </span>
             <span className="px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/80 flex items-center gap-1.5">
-              <Tv className="w-3.5 h-3.5 text-cyan-400" /> Pantallas LED Gigantes
+              <Tv className="w-3.5 h-3.5 text-cyan-400" /> Pantallas LED
             </span>
             <span className="px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/80 flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-cyan-400" /> Planta Eléctrica & Efectos
+              <Zap className="w-3.5 h-3.5 text-cyan-400" /> Alquiler de Plantas Eléctricas
+            </span>
+            <span className="px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/80 flex items-center gap-1.5">
+              <Flame className="w-3.5 h-3.5 text-cyan-400" /> Efectos Especiales
             </span>
           </div>
 
@@ -112,34 +115,6 @@ export const Hero: React.FC = () => {
               <Grid className="w-5 h-5 text-cyan-400" />
               <span>Estructura Techo Truss 10x10</span>
             </a>
-          </div>
-
-          {/* Key Metrics Strip */}
-          <div className="grid grid-cols-3 gap-4 sm:gap-8 mt-14 pt-10 border-t border-slate-800/80 w-full max-w-2xl">
-            <div className="flex flex-col items-center">
-              <span className="text-2xl sm:text-4xl font-extrabold text-white font-['Syne']">
-                {COMPANY_INFO.experienceYears}
-              </span>
-              <span className="text-xs text-slate-400 uppercase tracking-wider mt-1">
-                Años de Trayectoria
-              </span>
-            </div>
-            <div className="flex flex-col items-center border-x border-slate-800">
-              <span className="text-2xl sm:text-4xl font-extrabold text-cyan-400 font-['Syne'] drop-shadow-[0_0_10px_rgba(6,182,212,0.3)]">
-                {COMPANY_INFO.eventsCompleted}
-              </span>
-              <span className="text-xs text-slate-400 uppercase tracking-wider mt-1">
-                Eventos Realizados
-              </span>
-            </div>
-            <div className="flex flex-col items-center">
-              <span className="text-2xl sm:text-4xl font-extrabold text-white font-['Syne']">
-                {COMPANY_INFO.satisfactionRate}
-              </span>
-              <span className="text-xs text-slate-400 uppercase tracking-wider mt-1">
-                Compromiso & Calidad
-              </span>
-            </div>
           </div>
         </div>
       </div>

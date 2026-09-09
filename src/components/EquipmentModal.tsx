@@ -190,39 +190,23 @@ export const EquipmentModal: React.FC<EquipmentModalProps> = ({
               </p>
             </div>
 
-            {/* Technical Specs Grid */}
-            <div>
-              <h4 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-cyan-400" />
-                Especificaciones Técnicas
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {item.specs.map((spec, i) => (
-                  <div
-                    key={i}
-                    className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800/90 flex justify-between items-center text-xs"
-                  >
-                    <span className="text-slate-400">{spec.label}</span>
-                    <span className="font-semibold text-slate-100 text-right ml-2">{spec.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* Features List */}
-            <div>
-              <h4 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-2">
-                Características del Equipo
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {item.features.map((feat, i) => (
-                  <div key={i} className="flex items-start gap-2 text-xs text-slate-300">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
-                    <span>{feat}</span>
-                  </div>
-                ))}
+            {item.features && item.features.length > 0 && (
+              <div>
+                <h4 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                  Características Principales
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {item.features.map((feat, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs text-slate-300">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                      <span>{feat}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Ideal For Tags */}
             <div>
@@ -254,7 +238,7 @@ export const EquipmentModal: React.FC<EquipmentModalProps> = ({
             onClick={onClose}
             className="w-full sm:w-auto px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold border border-slate-700 transition-colors ml-auto"
           >
-            Cerrar Ficha Técnica
+            Cerrar
           </button>
         </div>
       </div>

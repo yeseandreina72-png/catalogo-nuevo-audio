@@ -7,6 +7,7 @@ import {
   Tv,
   Flame,
   Zap,
+  Bot,
   Info,
   Search,
   ArrowUpRight,
@@ -121,6 +122,8 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
         return <Volume2 className="w-4 h-4" />;
       case 'iluminacion':
         return <Sun className="w-4 h-4" />;
+      case 'robot-led':
+        return <Bot className="w-4 h-4" />;
       case 'pantallas':
         return <Tv className="w-4 h-4" />;
       case 'efectos':
@@ -365,7 +368,7 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                         onClick={() => onViewItemDetails(item)}
                         className="w-full py-2.5 px-4 rounded-xl bg-slate-800/90 hover:bg-gradient-to-r hover:from-cyan-400 hover:to-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-bold border border-cyan-500/30 hover:border-transparent flex items-center justify-center gap-2 transition-all group/btn shadow-md shadow-cyan-950/20"
                       >
-                        <span>Ver Ficha Técnica & Medidas</span>
+                        <span>Ver Información & Detalles</span>
                         <ArrowUpRight className="w-4 h-4 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
                       </button>
                     </div>
