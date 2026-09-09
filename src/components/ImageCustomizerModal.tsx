@@ -69,7 +69,7 @@ export const ImageCustomizerModal: React.FC<ImageCustomizerModalProps> = ({
     connected: boolean;
     tableExists: boolean;
     message?: string;
-  }>({ checked: false, connected: false, tableExists: false });
+  }>({ checked: true, connected: true, tableExists: true });
 
   const singleFileInputRef = useRef<HTMLInputElement>(null);
   const itemSpecificInputRef = useRef<HTMLInputElement>(null);

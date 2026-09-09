@@ -32,6 +32,8 @@ import {
   cleanSupabaseKey,
   extractProjectUrlFromKey,
   generateDeviceSyncUrl,
+  DEFAULT_SUPABASE_URL,
+  DEFAULT_SUPABASE_ANON_KEY,
 } from '../lib/supabase';
 import { EquipmentItem } from '../types';
 
@@ -83,13 +85,23 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
   const [statusMsg, setStatusMsg] = useState('');
 
   useEffect(() => {
-    const { url, anonKey } = getSupabaseConfig();
-    setSupabaseUrl(url);
-    setSupabaseKey(anonKey);
-
-    if (url && anonKey) {
-      handleTestConnection(url, anonKey);
+    // Purge any stale keys from localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const storedKey = localStorage.getItem('nuevo_audio_supabase_anon_key');
+        if (storedKey && storedKey !== DEFAULT_SUPABASE_ANON_KEY) {
+          localStorage.removeItem('nuevo_audio_supabase_anon_key');
+          localStorage.removeItem('nuevo_audio_supabase_url');
+        }
+      } catch {
+        // ignore
+      }
     }
+
+    setSupabaseUrl(DEFAULT_SUPABASE_URL);
+    setSupabaseKey(DEFAULT_SUPABASE_ANON_KEY);
+
+    handleTestConnection(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY);
   }, []);
 
   const handleOpenQrModal = async () => {
@@ -450,48 +462,6 @@ export const SupabaseSyncTab: React.FC<SupabaseSyncTabProps> = ({ items }) => {
                 {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
             </div>
-
-            {supabaseKey.startsWith('sb_publishable_') && (
-              <div className="p-3 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs space-y-2 mt-2">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-bold text-red-300">
-                      Este dispositivo tiene guardada la clave obsoleta de prueba (sb_publishable_...)
-                    </p>
-                    <p className="text-[11px] text-slate-300 mt-0.5">
-                      Por esta razón este celular muestra el error rojo. Tu computadora ya tiene la clave correcta en verde.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSupabaseKey('');
-                      if (typeof window !== 'undefined') {
-                        localStorage.removeItem('nuevo_audio_supabase_anon_key');
-                      }
-                      setTestResult(null);
-                      setStatusMsg('Clave vieja borrada de este dispositivo. Ahora puedes escanear el QR o pegar la clave nueva.');
-                      setTimeout(() => setStatusMsg(''), 4000);
-                    }}
-                    className="px-2.5 py-1.5 rounded-lg bg-red-500/30 hover:bg-red-500/40 text-red-200 font-bold text-xs border border-red-500/60 flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Borrar clave vieja de este celular</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePasteKey}
-                    className="px-2.5 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 font-semibold text-xs border border-cyan-500/40 flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <ClipboardPaste className="w-3.5 h-3.5" />
-                    <span>Pegar clave nueva (eyJ...)</span>
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="flex items-center gap-2 pt-1">
